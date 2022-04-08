@@ -26,6 +26,7 @@ The contents of this folder are summarized below
 | S. No. | Item Name | Description |
 | :----- | :-------- | :---------- |
 | 1 | [reading](./reading/README.md) folder | All reading material |
+| 2 | [res](./res/) folder | All repository resources (utility) |
 
 ### Extra files
 
