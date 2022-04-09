@@ -1,3 +1,6 @@
 # ---- Ignore editor files here ----
 # Ignore VSCode settings
 .vscode/
+training_checkpoints/
+logs/
+
