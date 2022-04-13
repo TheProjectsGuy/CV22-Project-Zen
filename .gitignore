@@ -4,3 +4,7 @@
 
 # Ignore test files
 test*
+
+# Ignore the checkpoints
+*_ckpts
+ckpts/
