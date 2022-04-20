@@ -47,3 +47,4 @@ Some files that are for the project itself
 
 - GitHub [phillipi/pix2pix](https://github.com/phillipi/pix2pix) (torch in lua)
 - TensorFlow Tutorials: [generative/pix2pix](https://www.tensorflow.org/tutorials/generative/pix2pix)
+- PyTorch tutorials: [junyanz/pytorch-CycleGAN-and-pix2pix](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix)
