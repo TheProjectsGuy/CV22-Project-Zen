@@ -3,4 +3,12 @@
 .vscode/
 training_checkpoints/
 logs/
-
+pytorch-CycleGAN-and-pix2pix/
+model.png
+p2p_old.py
+p2p_test.py
+pix2pix.ipynb
+pix2pix.py
+night2day-bs4.tar
+test.py
+generator_model.pth
