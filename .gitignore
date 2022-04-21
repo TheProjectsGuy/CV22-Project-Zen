@@ -12,3 +12,6 @@ pix2pix.py
 night2day-bs4.tar
 test.py
 generator_model.pth
+pix2pix/
+cityscapes.tar
+generator_model_200.pth
