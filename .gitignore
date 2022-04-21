@@ -8,3 +8,13 @@ test*
 # Ignore the checkpoints
 *_ckpts
 ckpts/
+pix2pix/
+training_checkpoints/
+logs/
+pytorch-CycleGAN-and-pix2pix/
+cityscapes.tar
+generator_model_200.pth
+night2day-bs4.tar
+p2p_old.py
+p2p_test.py
+test.py
