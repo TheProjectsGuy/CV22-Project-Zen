@@ -33,6 +33,10 @@ parser.add_argument("--num-epochs", type=int,
 # Checkpoint frequency
 parser.add_argument("--epoch-ckpt-freq", type=int, 
     help="Checkpoint frequency (in epochs)", default=1)
+parser.add_argument("--network", type=str, 
+    help="Network", default="Unet")
+parser.add_argument("--loss", type=str, 
+    help="Network", default="l1cgan")
 args, uk_args = parser.parse_known_args()
 print(f"Known arguments: {args}")
 # %%
@@ -197,6 +201,102 @@ class Generator(nn.Module):
         x = self.decoder_model[-1][1](x)
         return x
 
+
+class GeneratorED(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        norm_layer = functools.partial(nn.BatchNorm2d, affine=True, track_running_stats=True)
+        encoder_model = []
+        in_channel = 3
+        out_channel = 64
+        encoder_block = []
+        for i in range(8):
+            if i > 0 and i<7:
+                encoder = [
+                    nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
+                    nn.BatchNorm2d(out_channel),
+                    nn.LeakyReLU(0.2, True)
+                ]
+                encoder_block.append(encoder)
+                encoder_model = encoder_model + encoder
+            elif i==7:
+                encoder = [
+                    nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
+                    nn.LeakyReLU(0.2, True)
+                ]
+                encoder_block.append(encoder)
+                encoder_model = encoder_model + encoder
+            else:
+                encoder = [
+                    nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
+                    nn.LeakyReLU(0.2, True)
+                ]
+                encoder_block.append(encoder)
+                encoder_model = encoder_model + encoder
+            in_channel = out_channel
+            out_channel = min(512, out_channel*2)
+        self.encoder_model = encoder_block
+        decoder_model = []
+        decoder_block = []
+        decoder = [
+            nn.ConvTranspose2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
+            nn.BatchNorm2d(out_channel),
+            nn.Dropout2d(p=0.5),
+            nn.ReLU(True)
+        ]
+        decoder_block.append(decoder)
+        decoder_model = decoder_model + decoder
+        #in_channel*=2
+        for i in range(1, 7):
+            if i<3:
+                decoder = [
+                    nn.ConvTranspose2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
+                    nn.BatchNorm2d(out_channel),
+                    nn.Dropout2d(p=0.5),
+                    nn.ReLU(True)
+                ]
+                decoder_block.append(decoder)
+                decoder_model = decoder_model + decoder
+            else:
+                decoder = [
+                    nn.ConvTranspose2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
+                    nn.BatchNorm2d(out_channel),
+                    nn.ReLU(True)
+                ]
+                decoder_block.append(decoder)
+                decoder_model = decoder_model + decoder
+            in_channel = out_channel
+            out_channel = min(512, int(out_channel/2)) if i>2 else 512
+        decoder = [
+            nn.ConvTranspose2d(in_channels=64, out_channels=3, kernel_size=4, stride=2, padding=1, bias=True),
+            nn.Tanh()
+        ]
+        decoder_block.append(decoder)
+        decoder_model = decoder_model + decoder
+        self.decoder_model = decoder_block
+        model = encoder_model + decoder_model
+        self.model = nn.Sequential(*model)
+
+    def forward(self, x):
+        skips = []
+        idx = 0
+        for encoder in self.encoder_model:
+            for mod in encoder:
+                x = mod(x)
+            skips.append(x)
+        skips = skips[:-1]
+        skips.reverse()
+        decoders = self.decoder_model[:-1]
+        for decoder, skip in zip(decoders, skips):
+            for mod in decoder:
+                x = mod(x)
+            #x = torch.cat((x, skip), 1)
+            
+        x = self.decoder_model[-1][0](x)
+        x = self.decoder_model[-1][1](x)
+        return x
+
+
 def Gloss_function(output, target, discriminator_op, device):
     LAMBDA = 100
     l1_loss = nn.L1Loss().to(device)
@@ -246,7 +346,155 @@ def Dloss_function(real_image, generated_image, device):
 
     return loss
 
+"""
+class DownSampleConv(nn.Module):
 
+    def __init__(self, in_channels, out_channels, kernel=4, strides=2, padding=1, activation=True, batchnorm=True):
+        
+        #Paper details:
+        #- C64-C128-C256-C512-C512-C512-C512-C512
+        #- All convolutions are 4×4 spatial filters applied with stride 2
+        #- Convolutions in the encoder downsample by a factor of 2
+        
+        super().__init__()
+        self.activation = activation
+        self.batchnorm = batchnorm
+
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel, strides, padding)
+
+        if batchnorm:
+            self.bn = nn.BatchNorm2d(out_channels)
+
+        if activation:
+            self.act = nn.LeakyReLU(0.2)
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.batchnorm:
+            x = self.bn(x)
+        if self.activation:
+            x = self.act(x)
+        return x
+    
+class UpSampleConv(nn.Module):
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel=4,
+        strides=2,
+        padding=1,
+        activation=True,
+        batchnorm=True,
+        dropout=False
+    ):
+        super().__init__()
+        self.activation = activation
+        self.batchnorm = batchnorm
+        self.dropout = dropout
+
+        self.deconv = nn.ConvTranspose2d(in_channels, out_channels, kernel, strides, padding)
+
+        if batchnorm:
+            self.bn = nn.BatchNorm2d(out_channels)
+
+        if activation:
+            self.act = nn.ReLU(True)
+
+        if dropout:
+            self.drop = nn.Dropout2d(0.5)
+
+    def forward(self, x):
+        x = self.deconv(x)
+        if self.batchnorm:
+            x = self.bn(x)
+
+        if self.dropout:
+            x = self.drop(x)
+        return x
+
+class Generator(nn.Module):
+
+    def __init__(self, in_channels=3, out_channels=3):
+        
+        #Paper details:
+        #- Encoder: C64-C128-C256-C512-C512-C512-C512-C512
+        #- All convolutions are 4×4 spatial filters applied with stride 2
+        #- Convolutions in the encoder downsample by a factor of 2
+        #- Decoder: CD512-CD1024-CD1024-C1024-C1024-C512 -C256-C128
+        
+        super().__init__()
+
+        # encoder/donwsample convs
+        self.encoders = [
+            DownSampleConv(in_channels, 64, batchnorm=False),  # bs x 64 x 128 x 128
+            DownSampleConv(64, 128),  # bs x 128 x 64 x 64
+            DownSampleConv(128, 256),  # bs x 256 x 32 x 32
+            DownSampleConv(256, 512),  # bs x 512 x 16 x 16
+            DownSampleConv(512, 512),  # bs x 512 x 8 x 8
+            DownSampleConv(512, 512),  # bs x 512 x 4 x 4
+            DownSampleConv(512, 512),  # bs x 512 x 2 x 2
+            DownSampleConv(512, 512),  # bs x 512 x 1 x 1
+        ]
+
+        # decoder/upsample convs
+        self.decoders = [
+            UpSampleConv(512, 512, dropout=True),  # bs x 512 x 2 x 2
+            UpSampleConv(1024, 512, dropout=True),  # bs x 512 x 4 x 4
+            UpSampleConv(1024, 512, dropout=True),  # bs x 512 x 8 x 8
+            UpSampleConv(1024, 512),  # bs x 512 x 16 x 16
+            UpSampleConv(1024, 256),  # bs x 256 x 32 x 32
+            UpSampleConv(512, 128),  # bs x 128 x 64 x 64
+            UpSampleConv(256, 64),  # bs x 64 x 128 x 128
+        ]
+        self.decoder_channels = [512, 512, 512, 512, 256, 128, 64]
+        self.final_conv = nn.ConvTranspose2d(64, out_channels, kernel_size=4, stride=2, padding=1)
+        self.tanh = nn.Tanh()
+
+        self.encoders = nn.ModuleList(self.encoders)
+        self.decoders = nn.ModuleList(self.decoders)
+
+    def forward(self, x):
+        skips_cons = []
+        for encoder in self.encoders:
+            x = encoder(x)
+
+            skips_cons.append(x)
+
+        skips_cons = list(reversed(skips_cons[:-1]))
+        decoders = self.decoders[:-1]
+
+        for decoder, skip in zip(decoders, skips_cons):
+            x = decoder(x)
+            # print(x.shape, skip.shape)
+            x = torch.cat((x, skip), axis=1)
+
+        x = self.decoders[-1](x)
+        # print(x.shape)
+        x = self.final_conv(x)
+        return self.tanh(x)
+
+
+class Discriminator(nn.Module):
+
+    def __init__(self, input_channels=6):
+        super().__init__()
+        self.d1 = DownSampleConv(input_channels, 64, batchnorm=False)
+        self.d2 = DownSampleConv(64, 128)
+        self.d3 = DownSampleConv(128, 256)
+        self.d4 = DownSampleConv(256, 512)
+        self.final = nn.Conv2d(512, 1, kernel_size=1)
+
+    def forward(self, x, y):
+        x = torch.cat([x, y], axis=1)
+        x0 = self.d1(x)
+        x1 = self.d2(x0)
+        x2 = self.d3(x1)
+        x3 = self.d4(x2)
+        xn = self.final(x3)
+        return xn
+"""
 # %%
 def resize(input_image, real_image, height, width):
     res = tf.Resize((height, width), interpolation=tf.InterpolationMode.NEAREST)
@@ -305,7 +553,7 @@ train_data = DatasetFromFolder(train_dir)
 
 # %%
 
-training_data_loader = DataLoader(dataset=train_data, batch_size=1, shuffle=True)
+training_data_loader = DataLoader(dataset=train_data, batch_size=10, shuffle=True)
 #validation_data_loader = DataLoader(dataset=test_data, batch_size=1, shuffle=True)
 #testing_data_loader = DataLoader(dataset=test_data, batch_size=4, shuffle=False)
 
@@ -317,7 +565,12 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # %%
 
 print("Building Generator")
-generator_model = Generator()
+if args.network == "Unet":
+    generator_model = Generator()
+elif args.network == "ED":
+    generator_model = GeneratorED()
+else:
+    quit()
 generator_model.apply(init_weights)
 generator_model = generator_model.to(device=device)
 print(generator_model)
@@ -357,20 +610,6 @@ if train:
 
             fake_img = generator_model(input_img)
 
-            # Generator updates
-            #for param in discriminator_model.parameters():
-            #    param.requires_grad = False
-            gan_optim.zero_grad()
-            fake_input = torch.cat((input_img, fake_img), 1)
-            pred_fake = discriminator_model.forward(fake_input)
-            """gan_l1_loss = criterionL1(fake_img, real_img) * 100
-            gan_loss = criterionGAN(pred_fake, True)"""
-            gan_l1_loss = l1_loss(fake_img, real_img) * 100.0
-            gan_loss = bce_loss(pred_fake, torch.ones_like(pred_fake))
-            loss_g = gan_loss + gan_l1_loss
-            loss_g.backward()
-            gan_optim.step()
-
             # Discriminator updates
             #for param in discriminator_model.parameters():
             #    param.requires_grad = True
@@ -395,6 +634,25 @@ if train:
 
             loss_d.backward()
             disc_optim.step()
+
+                        # Generator updates
+            #for param in discriminator_model.parameters():
+            #    param.requires_grad = False
+            gan_optim.zero_grad()
+            fake_input = torch.cat((input_img, fake_img), 1)
+            pred_fake = discriminator_model.forward(fake_input)
+            """gan_l1_loss = criterionL1(fake_img, real_img) * 100
+            gan_loss = criterionGAN(pred_fake, True)"""
+            gan_l1_loss = l1_loss(fake_img, real_img) * 100.0
+            gan_loss = bce_loss(pred_fake, torch.ones_like(pred_fake))
+            if args.loss == "l1cgan":
+                loss_g = gan_loss + gan_l1_loss
+            elif args.loss == "l1":
+                loss_g = gan_l1_loss/100
+            else:
+                quit()
+            loss_g.backward()
+            gan_optim.step()
             #gl.append(loss_g.item())
             #dl.append(loss_d.item())
         if iteration%20 == 0:
@@ -402,8 +660,8 @@ if train:
                 i, iteration, len(training_data_loader), loss_d.item(), loss_g.item()))
 
         if i%int(args.epoch_ckpt_freq) == 0:
-            net_g_model_out_path = args.out_dir+"generator_model_{}.pth".format(i)
-            net_d_model_out_path = args.out_dir+"discriminator_model_{}.pth".format(i)
+            net_g_model_out_path = args.out_dir+"generator_model.pth"
+            net_d_model_out_path = args.out_dir+"discriminator_model.pth"
             torch.save(generator_model, net_g_model_out_path)
             torch.save(discriminator_model, net_d_model_out_path)
         #quit()
