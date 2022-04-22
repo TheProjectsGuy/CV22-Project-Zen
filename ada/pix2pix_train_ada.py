@@ -189,9 +189,9 @@ gen_model = GeneratorModel(IMG_HEIGHT, IMG_WIDTH, IN_CHANNELS,
 out_img = gen_model(test_img)
 print(f"Generator shape: {test_img.shape} -> {out_img.shape}")
 # Show the generator model
-keras.utils.plot_model(gen_model, show_shapes=True, 
-    to_file=f"{out_dir}/gen_model.png")
-gen_model.summary(expand_nested=True)
+# keras.utils.plot_model(gen_model, show_shapes=True, 
+#     to_file=f"{out_dir}/gen_model.png")
+gen_model.summary()
 
 # %%
 if args.disc_receptive_field == '1x1':
@@ -209,9 +209,9 @@ b = tf.constant(np.random.rand(1, 256, 256, 3), dtype=tf.float32)
 disc_model = DiscriminatorModel(IMG_HEIGHT, IMG_WIDTH, IN_CHANNELS)
 out_img = disc_model([a, b])
 print(f"Input shapes: {a.shape} -> {out_img.shape}")
-keras.utils.plot_model(disc_model, show_shapes=True, 
-    expand_nested=True, to_file=f"{out_dir}/disc_model.png")
-disc_model.summary(expand_nested=True)
+# keras.utils.plot_model(disc_model, show_shapes=True, 
+#     expand_nested=True, to_file=f"{out_dir}/disc_model.png")
+disc_model.summary()
 
 
 # %% Loss functions
