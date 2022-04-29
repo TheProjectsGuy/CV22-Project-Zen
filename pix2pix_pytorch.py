@@ -37,6 +37,8 @@ parser.add_argument("--network", type=str,
     help="Network", default="Unet")
 parser.add_argument("--loss", type=str, 
     help="Network", default="l1cgan")
+parser.add_argument("--batch", type=int, 
+    help="Network", default=10)
 args, uk_args = parser.parse_known_args()
 print(f"Known arguments: {args}")
 # %%
@@ -115,65 +117,58 @@ class Generator(nn.Module):
         in_channel = 3
         out_channel = 64
         encoder_block = []
-        for i in range(8):
-            if i > 0 and i<7:
-                encoder = [
-                    nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
-                    nn.BatchNorm2d(out_channel),
-                    nn.LeakyReLU(0.2, True)
+        encoder = [
+            nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
+        ]
+        encoder_block.append(encoder)
+        encoder_model = encoder_model + encoder
+        in_channel = out_channel
+        out_channel = min(512, out_channel*2)
+        for i in range(1,7):
+            encoder = [
+                nn.LeakyReLU(0.2, True),
+                nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
+                nn.BatchNorm2d(out_channel),
                 ]
-                encoder_block.append(encoder)
-                encoder_model = encoder_model + encoder
-            elif i==7:
-                encoder = [
-                    nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
-                    nn.LeakyReLU(0.2, True)
-                ]
-                encoder_block.append(encoder)
-                encoder_model = encoder_model + encoder
-            else:
-                encoder = [
-                    nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
-                    nn.LeakyReLU(0.2, True)
-                ]
-                encoder_block.append(encoder)
-                encoder_model = encoder_model + encoder
+            encoder_block.append(encoder)
+            encoder_model = encoder_model + encoder
             in_channel = out_channel
             out_channel = min(512, out_channel*2)
+        encoder = [
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True)
+        ]
+        encoder_block.append(encoder)
+        encoder_model = encoder_model + encoder
+        in_channel = out_channel
+        out_channel = min(512, out_channel*2)
         self.encoder_model = encoder_block
+
         decoder_model = []
         decoder_block = []
-        decoder = [
-            nn.ConvTranspose2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
-            nn.BatchNorm2d(out_channel),
-            nn.Dropout2d(p=0.5),
-            nn.ReLU(True)
-        ]
-        decoder_block.append(decoder)
-        decoder_model = decoder_model + decoder
-        in_channel*=2
-        for i in range(1, 7):
+        for i in range(0, 7):
             if i<3:
                 decoder = [
+                    nn.ReLU(True),
                     nn.ConvTranspose2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
                     nn.BatchNorm2d(out_channel),
-                    nn.Dropout2d(p=0.5),
-                    nn.ReLU(True)
+                    nn.Dropout2d(p=0.5)
                 ]
                 decoder_block.append(decoder)
                 decoder_model = decoder_model + decoder
             else:
                 decoder = [
+                    nn.ReLU(True),
                     nn.ConvTranspose2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
                     nn.BatchNorm2d(out_channel),
-                    nn.ReLU(True)
                 ]
                 decoder_block.append(decoder)
                 decoder_model = decoder_model + decoder
             in_channel = 2*out_channel
             out_channel = min(512, int(out_channel/2)) if i>2 else 512
         decoder = [
-            nn.ConvTranspose2d(in_channels=128, out_channels=3, kernel_size=4, stride=2, padding=1, bias=True),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(in_channels=in_channel, out_channels=3, kernel_size=4, stride=2, padding=1),
             nn.Tanh()
         ]
         decoder_block.append(decoder)
@@ -210,65 +205,58 @@ class GeneratorED(nn.Module):
         in_channel = 3
         out_channel = 64
         encoder_block = []
-        for i in range(8):
-            if i > 0 and i<7:
-                encoder = [
-                    nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
-                    nn.BatchNorm2d(out_channel),
-                    nn.LeakyReLU(0.2, True)
+        encoder = [
+            nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
+        ]
+        encoder_block.append(encoder)
+        encoder_model = encoder_model + encoder
+        in_channel = out_channel
+        out_channel = min(512, out_channel*2)
+        for i in range(1,7):
+            encoder = [
+                nn.LeakyReLU(0.2, True),
+                nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
+                nn.BatchNorm2d(out_channel),
                 ]
-                encoder_block.append(encoder)
-                encoder_model = encoder_model + encoder
-            elif i==7:
-                encoder = [
-                    nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
-                    nn.LeakyReLU(0.2, True)
-                ]
-                encoder_block.append(encoder)
-                encoder_model = encoder_model + encoder
-            else:
-                encoder = [
-                    nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
-                    nn.LeakyReLU(0.2, True)
-                ]
-                encoder_block.append(encoder)
-                encoder_model = encoder_model + encoder
+            encoder_block.append(encoder)
+            encoder_model = encoder_model + encoder
             in_channel = out_channel
             out_channel = min(512, out_channel*2)
+        encoder = [
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True)
+        ]
+        encoder_block.append(encoder)
+        encoder_model = encoder_model + encoder
+        in_channel = out_channel
+        out_channel = min(512, out_channel*2)
         self.encoder_model = encoder_block
+
         decoder_model = []
         decoder_block = []
-        decoder = [
-            nn.ConvTranspose2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
-            nn.BatchNorm2d(out_channel),
-            nn.Dropout2d(p=0.5),
-            nn.ReLU(True)
-        ]
-        decoder_block.append(decoder)
-        decoder_model = decoder_model + decoder
-        #in_channel*=2
-        for i in range(1, 7):
+        for i in range(0, 7):
             if i<3:
                 decoder = [
+                    nn.ReLU(True),
                     nn.ConvTranspose2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
                     nn.BatchNorm2d(out_channel),
-                    nn.Dropout2d(p=0.5),
-                    nn.ReLU(True)
+                    nn.Dropout2d(p=0.5)
                 ]
                 decoder_block.append(decoder)
                 decoder_model = decoder_model + decoder
             else:
                 decoder = [
+                    nn.ReLU(True),
                     nn.ConvTranspose2d(in_channels=in_channel, out_channels=out_channel, kernel_size=4, stride=2, padding=1, bias=True),
                     nn.BatchNorm2d(out_channel),
-                    nn.ReLU(True)
                 ]
                 decoder_block.append(decoder)
                 decoder_model = decoder_model + decoder
             in_channel = out_channel
             out_channel = min(512, int(out_channel/2)) if i>2 else 512
         decoder = [
-            nn.ConvTranspose2d(in_channels=64, out_channels=3, kernel_size=4, stride=2, padding=1, bias=True),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(in_channels=in_channel, out_channels=3, kernel_size=4, stride=2, padding=1),
             nn.Tanh()
         ]
         decoder_block.append(decoder)
@@ -316,11 +304,10 @@ class Discriminator(nn.Module):
         discriminator = []
         p1 = 1
         p2 = 1
-        discriminator.append(nn.Conv2d(in_channels=6, out_channels=64, kernel_size=4, stride=2, padding=1, bias=True))
+        discriminator.append(nn.Conv2d(in_channels=6, out_channels=64, kernel_size=4, stride=2, padding=1))
         discriminator.append(nn.LeakyReLU(0.2, True))
         
         discriminator.append(nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1, bias=True))
-        
         discriminator.append(nn.BatchNorm2d(128))
         discriminator.append(nn.LeakyReLU(0.2, True))
 
@@ -332,7 +319,7 @@ class Discriminator(nn.Module):
         discriminator.append(nn.BatchNorm2d(512))
         discriminator.append(nn.LeakyReLU(0.2, True))
 
-        discriminator.append(nn.Conv2d(in_channels=512, out_channels=1, kernel_size=4, stride=1, padding=1, bias=True))
+        discriminator.append(nn.Conv2d(in_channels=512, out_channels=1, kernel_size=4, stride=1, padding=1))
         self.model = nn.Sequential(*discriminator)
     
     def forward(self, x):
@@ -537,8 +524,11 @@ def random_jitter(input_image, real_image):
     return input_image, real_image
 
 def init_weights(m):
-    if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.BatchNorm2d)):
+    if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
         torch.nn.init.normal_(m.weight, 0.0, 0.02)
+    if isinstance(m, (nn.BatchNorm2d)):
+        torch.nn.init.normal_(m.weight, 1.0, 0.02)
+        torch.nn.init.constant_(m.bias.data, 0.0)
 
 
 # %%
@@ -553,7 +543,7 @@ train_data = DatasetFromFolder(train_dir)
 
 # %%
 
-training_data_loader = DataLoader(dataset=train_data, batch_size=10, shuffle=True)
+training_data_loader = DataLoader(dataset=train_data, batch_size=args.batch, shuffle=True)
 #validation_data_loader = DataLoader(dataset=test_data, batch_size=1, shuffle=True)
 #testing_data_loader = DataLoader(dataset=test_data, batch_size=4, shuffle=False)
 
@@ -630,7 +620,7 @@ if train:
             pred_fake = discriminator_model.forward(fake_input)
             loss_generated = bce_loss(pred_fake, torch.zeros_like(pred_fake))
             
-            loss_d = loss_generated+loss_real
+            loss_d = (loss_generated+loss_real)/2
 
             loss_d.backward()
             disc_optim.step()
@@ -643,12 +633,12 @@ if train:
             pred_fake = discriminator_model.forward(fake_input)
             """gan_l1_loss = criterionL1(fake_img, real_img) * 100
             gan_loss = criterionGAN(pred_fake, True)"""
-            gan_l1_loss = l1_loss(fake_img, real_img) * 100.0
-            gan_loss = bce_loss(pred_fake, torch.ones_like(pred_fake))
+            gan_l1_loss = l1_loss(fake_img, real_img)
             if args.loss == "l1cgan":
-                loss_g = gan_loss + gan_l1_loss
+                gan_loss = bce_loss(pred_fake, torch.ones_like(pred_fake))
+                loss_g = gan_loss + gan_l1_loss*100.0
             elif args.loss == "l1":
-                loss_g = gan_l1_loss/100
+                loss_g = gan_l1_loss
             else:
                 quit()
             loss_g.backward()
@@ -659,7 +649,7 @@ if train:
             print("===> Epoch[{}]({}/{}): Disc_Loss: {:.4f} Gen_Loss: {:.4f}".format(
                 i, iteration, len(training_data_loader), loss_d.item(), loss_g.item()))
 
-        if i%int(args.epoch_ckpt_freq) == 0:
+        if (i+1)%int(args.epoch_ckpt_freq) == 0:
             net_g_model_out_path = args.out_dir+"generator_model.pth"
             net_d_model_out_path = args.out_dir+"discriminator_model.pth"
             torch.save(generator_model, net_g_model_out_path)
