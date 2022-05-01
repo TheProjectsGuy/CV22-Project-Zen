@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -A research
 #SBATCH -J "pix2pix-v2"
-#SBATCH -c 10
+#SBATCH -c 5
 #SBATCH -G 1
 #SBATCH --mem-per-cpu=4G
 #SBATCH --exclude="gnode[03-42,90-92]"
