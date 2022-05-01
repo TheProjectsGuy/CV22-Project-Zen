@@ -140,7 +140,7 @@ else:
     DiscriminatorModel = DiscriminatorModel_286x286
 
 # FIXME: Remove the next line
-DiscriminatorModel = DiscriminatorModel_70x70
+DiscriminatorModel = DiscriminatorModel_286x286
 disc_model = DiscriminatorModel(IMG_HEIGHT, IMG_WIDTH, IN_CHANNELS)
 disc_model.summary()
 # Optimizer parameters
@@ -155,7 +155,7 @@ discriminator_opt = keras.optimizers.Adam(ADAM_LR, ADAM_BETA_1,
 
 # %% Checkpoint restoration object
 CHECKPOINT_DIR = os.path.realpath(args.checkpoint_dir)
-CHECKPOINT_DIR = "./ckpts/d70x70"   # FIXME: Remove this
+CHECKPOINT_DIR = "./ckpts/d286x286"   # FIXME: Remove this
 ckpt_handler = tf.train.Checkpoint(gen_op = generator_opt, 
     model_gen = gen_model, disc_opt = discriminator_opt, 
     model_disc = disc_model)

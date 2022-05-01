@@ -16,12 +16,12 @@ from tensorflow import initializers as tfinit
 from tensorflow import keras
 
 # %%
-# Downsample layer (Conv + BN + ReLu)
+# Downsample layer (ReLU + Conv + BN)
 def downsample_layer(no_filters, kernel_size, conv_strides=2, 
         padding='same', use_bn=True, lrelu_alpha=0.3, k_bias=True):
     r"""
-        A downsampling layer has Convolution + Batch Normalization + 
-        Leaky ReLU. This is used in the Encoder (of Generator) and 
+        A downsampling layer has Leaky ReLU + Convolution + Batch 
+        Normalization. This is used in the Encoder (of Generator) and 
         Discriminator.
 
         Parameters:
@@ -36,6 +36,8 @@ def downsample_layer(no_filters, kernel_size, conv_strides=2,
     # Initializer as in arxiv paper (section 6.2)
     kinit = tfinit.RandomNormal(mean=0.0, stddev=0.02)
     step_layers = keras.Sequential()    # Container for layers
+    # Leaky ReLU layer
+    step_layers.add(keras.layers.LeakyReLU(alpha=lrelu_alpha))
     # Convolution
     step_layers.add(keras.layers.Conv2D(no_filters, kernel_size, 
         conv_strides, padding, kernel_initializer=kinit, 
@@ -43,12 +45,10 @@ def downsample_layer(no_filters, kernel_size, conv_strides=2,
     # Use batch normalization
     if use_bn:
         step_layers.add(keras.layers.BatchNormalization())
-    # Leaky ReLU layer
-    step_layers.add(keras.layers.LeakyReLU(alpha=lrelu_alpha))
     return step_layers  # All layers for downsampling
 
 # %%
-# Upsampling layer (Upconv + BN + ReLU)
+# Upsampling layer (ReLU + UpConv + BN + Dropout)
 def upsample_layer(no_filters, kernel_size, upconv_strides=2, 
         padding='same', use_bn=True, use_dpo=True, lrelu_alpha=0.3, 
         k_bias=True):
@@ -70,6 +70,8 @@ def upsample_layer(no_filters, kernel_size, upconv_strides=2,
     # Initializer as in arxiv paper (section 6.2)
     kinit = tfinit.RandomNormal(mean=0.0, stddev=0.02)
     step_layers = keras.Sequential()    # Container for layers
+    # ReLU layer
+    step_layers.add(keras.layers.LeakyReLU(alpha=lrelu_alpha))
     # Up-convolution
     step_layers.add(keras.layers.Conv2DTranspose(no_filters, 
         kernel_size, upconv_strides, padding=padding, use_bias=k_bias,
@@ -80,8 +82,6 @@ def upsample_layer(no_filters, kernel_size, upconv_strides=2,
     # Use dropout
     if use_dpo:
         step_layers.add(keras.layers.Dropout(0.5))
-    # ReLU layer
-    step_layers.add(keras.layers.LeakyReLU(alpha=lrelu_alpha))
     return step_layers
 
 # %%
@@ -90,7 +90,7 @@ def upsample_layer(no_filters, kernel_size, upconv_strides=2,
 def GeneratorModel(img_h, img_w, in_ch, out_ch, enc_ks=4, 
         enc_depths=[64, 128, 256, *(5*[512])], dec_ks=4, 
         dec_depths=[*(4*[512]), 256, 128, 64], 
-        dec_dropouts=[*(3*[True]), *(4*[False])]):
+        dec_dropouts=[False, *(2*[True]), *(4*[False])]):
     r"""
         Generator model
 
@@ -112,17 +112,23 @@ def GeneratorModel(img_h, img_w, in_ch, out_ch, enc_ks=4,
     encoder_layers = []
     # First layer (no batch normalization - Sec. 6.1.1 arxiv paper)
     encoder_layers.append(downsample_layer(enc_depths[0], enc_ks, 
-        use_bn=False, lrelu_alpha=0.2))
+        use_bn=False, lrelu_alpha=1))   # No ReLU even
     # Add remaining layers with batch normalization
-    for i in range(1, len(enc_depths)):
+    for i in range(1, len(enc_depths)-1):
         encoder_layers.append(downsample_layer(enc_depths[i], enc_ks, 
             lrelu_alpha=0.2))
+    # Last encoder layer has no batch normalization (see arXiv errata)
+    encoder_layers.append(downsample_layer(
+        enc_depths[len(enc_depths)-1], enc_ks, use_bn=False, 
+        lrelu_alpha=0.2))
     # Decoder is upsampling
     decoder_layers = []
     # Add all layers to decoder
     for i in range(len(dec_depths)):
         decoder_layers.append(upsample_layer(dec_depths[i], dec_ks, 
             use_dpo=dec_dropouts[i], lrelu_alpha=0.0))
+    # ReLU for last layer
+    last_relu = keras.layers.ReLU()
     # Last layer for convolution (upsample from decoder to out_img)
     last_layer = keras.layers.Conv2DTranspose(out_ch, dec_ks, 2, 
         padding='same', activation=keras.activations.tanh,
@@ -142,7 +148,8 @@ def GeneratorModel(img_h, img_w, in_ch, out_ch, enc_ks=4,
         if i < len(cache_skips):    # Skips left to add
             x = tf.keras.layers.Concatenate()([x, cache_skips[i]])
     # Through the last layer
-    x = last_layer(x)
+    x = last_relu(x)    # First ReLU
+    x = last_layer(x)   # Then UpConv. Use from_logits = True (train)
     # Final model
     gen_model = keras.Model(inputs=batch_in, outputs=x)
     return gen_model    # Generator model
@@ -203,7 +210,8 @@ def DiscriminatorModel_1x1(img_h, img_w, in_c):
     seq_model = keras.Sequential()
     seq_model.add(downsample_layer(64, 1, 1, lrelu_alpha=0.2))
     seq_model.add(downsample_layer(128, 1, 1, lrelu_alpha=0.2))
-    seq_model.add(downsample_layer(1, 1, 1, lrelu_alpha=1)) # No ReLU
+    seq_model.add(downsample_layer(1, 1, 1, lrelu_alpha=1, 
+        use_bn=False)) # No ReLU and no BatchNorm
     # Pass data through it
     x = keras.layers.Concatenate()([in_img, out_img])
     x = seq_model(x)
@@ -223,7 +231,8 @@ def DiscriminatorModel_16x16(img_h, img_w, in_c):
     seq_model = keras.Sequential()
     seq_model.add(downsample_layer(64, 4, lrelu_alpha=0.2))
     seq_model.add(downsample_layer(128, 4, lrelu_alpha=0.2))
-    seq_model.add(downsample_layer(1, 1, 1, lrelu_alpha=1)) # No ReLU
+    seq_model.add(downsample_layer(1, 1, 1, use_bn=False, 
+        lrelu_alpha=1)) # No BatchNorm and No ReLU
     # Pass data through it
     x = keras.layers.Concatenate()([in_img, out_img])
     x = seq_model(x)
@@ -247,9 +256,15 @@ def DiscriminatorModel_286x286(img_h, img_w, in_c):
     seq_model.add(downsample_layer(512, 4, lrelu_alpha=0.2))
     seq_model.add(downsample_layer(512, 4, lrelu_alpha=0.2))
     seq_model.add(downsample_layer(512, 4, lrelu_alpha=0.2))
-    seq_model.add(downsample_layer(1, 1, 1, lrelu_alpha=1)) # No ReLU
+    seq_model.add(downsample_layer(1, 1, 1, use_bn=False, 
+        lrelu_alpha=1)) # No BatchNorm and No ReLU
     # Pass data through it
     x = keras.layers.Concatenate()([in_img, out_img])
     x = seq_model(x)
     disc_model = keras.Model(inputs=[in_img, out_img], outputs=x)
     return disc_model
+
+
+# %% Experimental section
+
+# %%

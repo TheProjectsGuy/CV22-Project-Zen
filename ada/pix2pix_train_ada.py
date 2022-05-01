@@ -21,6 +21,10 @@ parser.add_argument("--out-dir", type=str, help="Output directory",
 # Number of epochs for training
 parser.add_argument("--num-epochs", type=int, default=200,
     help="Number of epochs for training")
+# Learning Rate scheduler (scaling factor)
+parser.add_argument("--lrsc-p", type=float, default=0.5,
+    help="Percentage of total epochs at and after which the learning "
+        "rate scheduler kicks in (fraction from starting)")
 # Batch size for training
 parser.add_argument("--batch-size", type=int, default=1, 
     help="Batch size for training")
@@ -71,7 +75,7 @@ import os
 import glob
 # Library
 from im_utils import cut_image, apply_jitter, create_img_pipeline
-from networks import downsample_layer, upsample_layer,\
+from nets import downsample_layer, upsample_layer,\
     GeneratorModel, \
     DiscriminatorModel_1x1, DiscriminatorModel_16x16, \
     DiscriminatorModel_70x70, DiscriminatorModel_286x286
@@ -86,7 +90,20 @@ from tensorflow import keras
 # ==== Sanity check for TensorFlow ====
 print(f"TensorFlow version: {tf.__version__}")
 print(f"Devices: {tf.config.list_physical_devices()}")
-
+# Set the limit on memory growth
+# From: https://www.tensorflow.org/guide/gpu#limiting_gpu_memory_growth
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+  try:
+    # Currently, memory growth needs to be the same across GPUs
+    for gpu in gpus:
+      tf.config.experimental.set_memory_growth(gpu, True)
+    logical_gpus = tf.config.list_logical_devices('GPU')
+    print(len(gpus), "Physical GPUs,", 
+        len(logical_gpus), "Logical GPUs")
+  except RuntimeError as e:
+    # Memory growth must be set before GPUs have been initialized
+    print(e)
 
 # %%
 # Dataset path
@@ -173,6 +190,7 @@ test_img = tf.constant(np.random.rand(1, IMG_HEIGHT, IMG_WIDTH,
 down_model = downsample_layer(OUT_CHANNELS, KERNEL_SIZE)
 down_result = down_model(test_img)
 print(f"Downsample: {test_img.shape} -> {down_result.shape}")
+
 # %%
 # Upsample
 up_model = upsample_layer(OUT_CHANNELS, KERNEL_SIZE)
@@ -200,8 +218,11 @@ elif args.disc_receptive_field == '16x16':
     DiscriminatorModel = DiscriminatorModel_16x16
 elif args.disc_receptive_field == '70x70':
     DiscriminatorModel = DiscriminatorModel_70x70
-else:
+elif args.disc_receptive_field == '286x286':
     DiscriminatorModel = DiscriminatorModel_286x286
+else:
+    raise ValueError(f"Invalid Descriptor receptive field"
+        f" - {args.disc_receptive_field}")
 
 # Test the discriminator
 a = tf.constant(np.random.rand(1, 256, 256, 3), dtype=tf.float32)
@@ -286,7 +307,49 @@ else:
     os.makedirs(CHECKPOINT_DIR)
 print(f"Using '{CHECKPOINT_DIR}' for saving checkpoints", flush=True)
 
+# Learning Rate schedulers
+class LinearEpochLRScheduler():
+    """
+        Create a learning rate schedule which scales the initial
+        learning rate with an epoch. The learning rate is linearly
+        reduced from pf*epoch to final epoch by a factor from 1.0 to
+        epsilon (usually 0).
+
+        This allows linear descent of learning rate midway.
+
+        Constructor parameters:
+
+        - init_lr: Initial learning rate
+        - num_epochs: Number of epochs (of training) planned
+        - pf: Progress factor (to start linear downscaling)
+        - epsilon: A very small quantity (final scaling for lr)
+    """
+    def __init__(self, init_lr, num_epochs, pf=0.5, epsilon=1e-7) \
+            -> None:
+        super().__init__()
+        self.init_lr = init_lr
+        self.num_epochs = num_epochs
+        self.epoch = 0  # Current epoch -> [0, ..., num_epochs-1]
+        self.pf = pf    # Progress factor
+        self.start_epoch = pf * self.num_epochs
+        self.eps = epsilon
+    
+    # Call when one epoch is over
+    def next_epoch(self):
+        self.epoch += 1
+    
+    def call(self):
+        lrf = 1.0
+        if self.epoch >= self.start_epoch:
+            # Factor is decreasing in straight line (1 to 0)
+            lrf = self.eps + ((1 - self.eps)/(self.start_epoch - \
+                self.num_epochs))*(self.epoch - self.num_epochs)
+        print(f"Learning rate factor: {lrf}")
+        return self.init_lr * lrf
+
 # Optimizers
+lr_scheduler = LinearEpochLRScheduler(ADAM_LR, NUM_EPOCHS, 
+    float(args.lrsc_p))
 generator_opt = keras.optimizers.Adam(ADAM_LR, ADAM_BETA_1, 
     ADAM_BETA_2)
 discriminator_opt = keras.optimizers.Adam(ADAM_LR, ADAM_BETA_1, 
@@ -333,6 +396,10 @@ ckpt_prefix = os.path.realpath(
 for epoch in range(NUM_EPOCHS):
     # Train for one epoch
     train_epoch()
+    lr_scheduler.next_epoch()   # Update learning rate scheduler
+    # Apply new learning rates (post each epoch)
+    generator_opt.lr = lr_scheduler.call()
+    discriminator_opt.lr = lr_scheduler.call()
     # Log checkpoint if applicable
     if (epoch + 1) % EPOCH_CKPT_FREQ == 0:
         print(f"Epoch: {epoch+1} completed, saving checkpoint", 

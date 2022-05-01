@@ -1,18 +1,21 @@
 #!/bin/bash
 #SBATCH -A research
-#SBATCH -J "pix2pix-v2"
+#SBATCH -J "p2p-v3-2"
 #SBATCH -c 10
 #SBATCH -G 1
 #SBATCH --mem-per-cpu=4G
 #SBATCH --exclude="gnode[03-42,90-92]"
-#SBATCH -o "pix2pix-r2.txt"
+#SBATCH -o "p2p-v3-t2.txt"
 #SBATCH --time="1-12:00:00"
 #SBATCH --mail-type=END
 
 
-# ======================================================
+# ==========================================================
 # SLURM script for training Pix2Pix on Ada
-# ======================================================
+# 
+# See variable `data_zip_fn` and set the `data_local_dir`
+# correctly
+# ==========================================================
 
 echo "[BLOCK] ======= Inspecting node ======="
 echo "Host: $HOSTNAME"
@@ -23,26 +26,33 @@ echo ""
 
 echo "[BLOCK] ======= Loading data into the node ======="
 # Check if scratch folder exists
-scratch_dir="/scratch/$USER"
+scratch_dir="/scratch/$USER/$SLURM_JOB_ID"  # Unique for each job!
 if [ ! -d $scratch_dir ]; then
-    mkdir $scratch_dir
+    mkdir -p $scratch_dir
 else
     echo "Folder '$scratch_dir' exists, contents are"
     tree -L 3 --filelimit=10 $scratch_dir
-    echo "Removing $scratch_dir"
+    # echo "Removing $scratch_dir"
     # rm -rf $scratch_dir
 fi
-# Move data from /share to /scratch
-data_local_dir="/share1/$USER/datasets/cityscapes.tar.gz"
-scp $USER@ada:$data_local_dir $scratch_dir
-echo "Dataset moved to $HOSTNAME"
+# Move data from /share (ADA Main) to /scratch (gnode)
+data_zip_fn="cityscapes"    # File name with no extension
+data_local_dir="/share1/$USER/datasets/$data_zip_fn.tar.gz"
+if [ -f "$scratch_dir/`basename $data_local_dir`" ]; then
+    echo "File $scratch_dir/`basename $data_local_dir` already exists"
+else
+    echo "File $scratch_dir/`basename $data_local_dir` not found, doing scp"
+    scp $USER@ada:$data_local_dir $scratch_dir
+    echo "Dataset moved to $HOSTNAME"
+fi
 echo ""
 
 
 echo "[BLOCK] ======= Setting up node environment ======="
 # Unzip everything
 cd $scratch_dir
-tar -xf ./cityscapes.tar.gz
+echo "[`pwd`] Unzipping `basename $data_local_dir`"
+tar -xf "`basename $data_local_dir`"
 echo "Unzip successful (pwd: `pwd`)"
 tree --filelimit 8 -h -L 4 .
 # Load modules
@@ -61,18 +71,19 @@ echo ""
 
 echo "[BLOCK] ======= Main training code ======="
 # Variables for script
-scratch_dir="/scratch/$USER"    # Again (sanity check)
 out_dir="$scratch_dir/pix2pix_$SLURM_JOB_ID/"
 data_dir="$scratch_dir"
-data_seg="cityscapes"
+data_seg="$data_zip_fn"
 num_epochs=200
 ckpt_freq=20
+batch_size=10
 
 # Main function call
-python ~/Documents/pix2pix_train_ada.py --data-dir=$data_dir \
+python ~/Pix2Pix/pix2pix_train_ada.py --data-dir=$data_dir \
     --data-seg=$data_seg --out-dir=$out_dir --num-epochs=$num_epochs \
-    --batch-size=1 --epoch-ckpt-freq=$ckpt_freq --right-in-left-out \
-    --in-channels=3 --out-channels=3 --disc-receptive-field=1x1
+    --batch-size=$batch_size --epoch-ckpt-freq=$ckpt_freq \
+    --in-channels=3 --out-channels=3 --disc-receptive-field=70x70 \
+    --lrsc-p=0.45
 # Save everything - out_dir exists (script creates it)
 if [ ! -d $out_dir ]; then
     echo "[ERROR] Output directory '$out_dir' does not exist, no backup"
