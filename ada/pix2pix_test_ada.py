@@ -70,7 +70,7 @@ import glob
 from tqdm import tqdm
 # Library
 from im_utils import create_img_pipeline, cut_image, resize_imgs
-from networks import GeneratorModel, \
+from nets import GeneratorModel, \
     DiscriminatorModel_1x1, DiscriminatorModel_16x16, \
     DiscriminatorModel_70x70, DiscriminatorModel_286x286
 
@@ -87,8 +87,8 @@ print(f"Devices: {tf.config.list_physical_devices()}")
 
 # %%
 # Test dataset path
-dataset_dir = r"C:\Users\123av\Downloads\Datasets\Pix2Pix"
-dataset_seg = r"cityscapes"
+dataset_dir = str(args.data_dir)
+dataset_seg = str(args.data_seg)
 # Directory for dataset
 data_dir = os.path.realpath(
         f"{os.path.expanduser(dataset_dir)}/{dataset_seg}")
@@ -139,15 +139,13 @@ elif args.disc_receptive_field == '70x70':
 else:
     DiscriminatorModel = DiscriminatorModel_286x286
 
-# FIXME: Remove the next line
-DiscriminatorModel = DiscriminatorModel_286x286
 disc_model = DiscriminatorModel(IMG_HEIGHT, IMG_WIDTH, IN_CHANNELS)
 disc_model.summary()
 # Optimizer parameters
 ADAM_LR = 2e-4
 ADAM_BETA_1 = 0.5
 ADAM_BETA_2 = 0.999
-# Optimizers
+# Optimizers (this won't matter)
 generator_opt = keras.optimizers.Adam(ADAM_LR, ADAM_BETA_1, 
     ADAM_BETA_2)
 discriminator_opt = keras.optimizers.Adam(ADAM_LR, ADAM_BETA_1, 
@@ -155,7 +153,6 @@ discriminator_opt = keras.optimizers.Adam(ADAM_LR, ADAM_BETA_1,
 
 # %% Checkpoint restoration object
 CHECKPOINT_DIR = os.path.realpath(args.checkpoint_dir)
-CHECKPOINT_DIR = "./ckpts/d286x286"   # FIXME: Remove this
 ckpt_handler = tf.train.Checkpoint(gen_op = generator_opt, 
     model_gen = gen_model, disc_opt = discriminator_opt, 
     model_disc = disc_model)

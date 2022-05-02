@@ -52,7 +52,7 @@ def norm_imgs(left_img, right_img):
 def random_crop_imgs(left_img, right_img, to_height, to_width):
     both_imgs = tf.stack([left_img, right_img], axis=0)
     cropped_imgs = tf.image.random_crop(both_imgs, 
-        size=[2, to_height, to_width, 3])
+        size=[2, to_height, to_width, 3])   # Don't crop B, C
     return cropped_imgs[0], cropped_imgs[1]
 
 # Apply random jitter to an image (resize, crop & mirror)
@@ -67,9 +67,9 @@ def apply_jitter(left_img, right_img, res_height, res_width):
     # Apply a random crop
     l_cimg, r_cimg = random_crop_imgs(limg, rimg, to_height, to_width)
     # Apply random mirroring
-    both_imgs = tf.stack([l_cimg, r_cimg])  # [2, H, W, 3]
-    both_fimgs = tf.image.random_flip_left_right(both_imgs)
-    l_fimg, r_fimg = both_fimgs[0], both_fimgs[1]   # Decouple
+    imgc = tf.concat([l_cimg, r_cimg], axis=2)  # H, W, 2*3
+    imgc_flipped = tf.image.random_flip_left_right(imgc)
+    l_fimg, r_fimg = imgc_flipped[..., :3], imgc_flipped[..., 3:]
     # Return both images
     return l_fimg, r_fimg
 

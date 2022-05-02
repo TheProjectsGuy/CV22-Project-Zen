@@ -1,6 +1,9 @@
 # Training script to train Pix2Pix pipelines on Ada
 """
     Custom Pix2Pix training pipeline for Ada jobs
+
+    Note: For now, all training samples, if not of 256x256, they'll
+        be reshaped.
 """
 
 # %% Parse arguments
@@ -13,7 +16,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--data-dir", help="Folder for datasets", 
     default="~/Downloads/Datasets/pix2pix", type=str)
 # Dataset folder (in path)
-parser.add_argument("--data-seg", type=str, default="cityscapes",
+parser.add_argument("--data-seg", type=str, default="maps",
     help="Segment in datasets")
 # Save paths
 parser.add_argument("--out-dir", type=str, help="Output directory",
@@ -74,7 +77,8 @@ import numpy as np
 import os
 import glob
 # Library
-from im_utils import cut_image, apply_jitter, create_img_pipeline
+from im_utils import cut_image, resize_imgs, apply_jitter, \
+    create_img_pipeline
 from nets import downsample_layer, upsample_layer,\
     GeneratorModel, \
     DiscriminatorModel_1x1, DiscriminatorModel_16x16, \
@@ -139,6 +143,8 @@ print(f"Shape of each image: {img.shape}")
 # A separated image pair
 left_img, right_img = cut_image(train_fnames[0])
 print(f"Separated to: {left_img.shape} and {right_img.shape}")
+print(f"During training, image size will be resized to 256x256")
+left_img, right_img = resize_imgs(left_img, right_img, 256, 256)
 # Some variables for augmentation
 BUFFER_SIZE = len(train_fnames)  # Number of data samples in training
 BATCH_SIZE = int(args.batch_size)   # Batch size for training
@@ -154,7 +160,6 @@ in_jimg, pred_jimg = apply_jitter(left_img, right_img, IMGR_HEIGHT,
     IMGR_WIDTH)
 print(f"Final shapes (left, right) = {in_jimg.shape}, "
       f"{pred_jimg.shape}")
-print(f"During training, image size will be 256x256")
 if L_IN_R_OUT:
     print("Left is input and right is output")
 else:
@@ -344,7 +349,6 @@ class LinearEpochLRScheduler():
             # Factor is decreasing in straight line (1 to 0)
             lrf = self.eps + ((1 - self.eps)/(self.start_epoch - \
                 self.num_epochs))*(self.epoch - self.num_epochs)
-        print(f"Learning rate factor: {lrf}")
         return self.init_lr * lrf
 
 # Optimizers

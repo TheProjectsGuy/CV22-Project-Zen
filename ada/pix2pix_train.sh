@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH -A research
-#SBATCH -J "p2p-v3-2"
-#SBATCH -c 10
+#SBATCH -J "p2p-s2m"
+#SBATCH -n 10
 #SBATCH -G 1
 #SBATCH --mem-per-cpu=4G
 #SBATCH --exclude="gnode[03-42,90-92]"
-#SBATCH -o "p2p-v3-t2.txt"
+#SBATCH -o "p2p-s2m-1.txt"
 #SBATCH --time="1-12:00:00"
 #SBATCH --mail-type=END
 
@@ -77,13 +77,15 @@ data_seg="$data_zip_fn"
 num_epochs=200
 ckpt_freq=20
 batch_size=10
+disc_rf="70x70" # Discriminator Receptive Field
 
 # Main function call
 python ~/Pix2Pix/pix2pix_train_ada.py --data-dir=$data_dir \
     --data-seg=$data_seg --out-dir=$out_dir --num-epochs=$num_epochs \
     --batch-size=$batch_size --epoch-ckpt-freq=$ckpt_freq \
-    --in-channels=3 --out-channels=3 --disc-receptive-field=70x70 \
-    --lrsc-p=0.45
+    --in-channels=3 --out-channels=3 --disc-receptive-field=$disc_rf \
+    --lrsc-p=0.5
+
 # Save everything - out_dir exists (script creates it)
 if [ ! -d $out_dir ]; then
     echo "[ERROR] Output directory '$out_dir' does not exist, no backup"
