@@ -24,8 +24,6 @@ Work distribution for the project amongst the developers.
 
 ### Working On
 
-- Modular implementation for Pix2Pix to customize things and test for different applications
-
 ### Done
 
 - Implement Pix2Pix from the ground-up using TensorFlow (using cityscapes dataset)

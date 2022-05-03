@@ -126,6 +126,12 @@ testing_dataset = testing_dataset.batch(BATCH_SIZE)
 IN_CHANNELS = int(args.in_channels)     # Input image depth
 OUT_CHANNELS = int(args.out_channels)   # Output image depth
 # Generator model
+# try:
+#     gen_model = GeneratorModel(IMG_HEIGHT, IMG_WIDTH, IN_CHANNELS, 
+#         OUT_CHANNELS)
+# except ValueError:
+#     gen_model = GeneratorModel(256, 256, IN_CHANNELS, 
+#         OUT_CHANNELS)
 gen_model = GeneratorModel(IMG_HEIGHT, IMG_WIDTH, IN_CHANNELS, 
     OUT_CHANNELS)
 gen_model.summary()
@@ -177,6 +183,8 @@ for test_fname, imgs_in in tqdm(zip(test_fnames, testing_dataset),
     # Input image for generator
     gen_in = imgs_in[0]
     gen_pred = imgs_in[1] # Don't need this
+    # # Resize to 256, 256
+    # gen_in, gen_pred = resize_imgs(gen_in, gen_pred, 256, 256)
     # Get output from generator
     gen_out = gen_model(gen_in)
     # Convert to RGB image
