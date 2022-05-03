@@ -309,7 +309,7 @@ def Dloss_function(real_image, generated_image, device):
     return loss
 
 
-dir_seg = "../dataset/leftImg8bit/gtFine/val/lindau"
+dir_seg = "../dataset/leftImg8bit/gtFine/val/munster"#"../dataset/leftImg8bit/val/munster"#
 files = glob(dir_seg+"/*")
 print(len(files))
 seg_file = files
@@ -349,22 +349,26 @@ with torch.no_grad():
     for input_file in tqdm(seg_file):
         #input_img, real_img = batch[0].to('cuda'), batch[1].to('cuda')
         city, shot, frame, type, img = (os.path.basename(input_file).split('_'))
+        #city, shot, frame, type = (os.path.basename(input_file).split('_'))
         if img != "color.png":
             continue
         #print(input_file)
-        input_img = cv2.imread(input_file)#Image.open(input_img).convert('RGB')
-        input_img = cv2.resize(input_img, (256, 256))
+        input_img = Image.open(input_file).convert('RGB')#cv2.imread(input_file)#Image.open(input_img).convert('RGB')
+        #input_img = cv2.resize(input_img, (256, 256))
         #cv2.imshow("img", input_img)
         #cv2.waitKey(0)
         #input_img = input_img.transpose(1,2,0)
         #input_img = input_img.reshape(1, input_img.shape[0], input_img.shape[1], input_img.shape[2])
-        input_img = transform_list(input_img)
+        """input_img = transform_list(input_img)
         input_img = torch.reshape(input_img, (1, input_img.shape[0], input_img.shape[1], input_img.shape[2]))
         gen_op = net_g(input_img.to('cuda'))
-        gen_op = ((gen_op[0].cpu().detach().numpy().transpose(1,2,0)+1)*127.5).astype(np.uint8)
+        gen_op = ((gen_op[0].cpu().detach().numpy().transpose(1,2,0)+1)*127.5).astype(np.uint8)"""
         
         name = "_".join([city, shot, frame])
-        cv2.imwrite("../dataset/results/ed_l1cgan/"+name+"_leftImg8bit.png", gen_op)
+        #cv2.imwrite("../dataset/results/unet_l1cgan/"+name+"_leftImg8bit.png", gen_op)
+        #cv2.imwrite("../dataset/results/unet_l1cgan/"+name+"_leftImg8bit.png", input_img)
+        #input_img = Image.fromarray(input_img)
+        input_img.save("../dataset/results/unet_l1cgan/"+name+"_leftImg8bit.png")
         #cv2.imshow("img", gen_op)
         #cv2.waitKey(0)
         #quit()

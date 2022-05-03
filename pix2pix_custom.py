@@ -13,6 +13,7 @@ import functools
 import numpy as np
 import cv2
 import argparse
+import random
 
 parser = argparse.ArgumentParser(
     description="Training script for pix2pix",
@@ -24,7 +25,7 @@ parser.add_argument("--data-dir", type=str,
 # Dataset folder (in path)
 parser.add_argument("--data-seg", type=str, 
     help="Segment in datasets",
-    default="night2day")
+    default="cityscapes")
 # Save paths
 parser.add_argument("--out-dir", type=str, help="Output directory", 
     default="")#default="/scratch/lonelyshark99/pix2pix_zen_ada/")
@@ -48,15 +49,23 @@ class DatasetFromFolder(data.Dataset):
         super(DatasetFromFolder, self).__init__()
         self.path = image_dir
         self.image_filenames = [x for x in listdir(self.path)]
+        
+    
+    def get_transforms(self, flip):
         transform_list = []
         transform_list.append(tf.ToPILImage())
         transform_list.append(tf.Resize((286, 286), interpolation=tf.InterpolationMode.BICUBIC))
         transform_list.append(tf.RandomCrop((256, 256)))
-        transform_list.append(tf.RandomHorizontalFlip())
+        transform_list.append(tf.Lambda(lambda img: self.flip(img, flip)))
         transform_list += [tf.ToTensor()]
         transform_list += [tf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
-        self.transform_list = tf.Compose(transform_list)
-        self.tensor_tf = tf.ToTensor()
+        transform_list = tf.Compose(transform_list)
+        return transform_list
+    
+    def flip(self, img, flip):
+        if flip:
+            return img.transpose(Image.FLIP_LEFT_RIGHT)
+        return img
 
     def __getitem__(self, index):
         a = Image.open(join(self.path, self.image_filenames[index])).convert('RGB')
@@ -65,27 +74,12 @@ class DatasetFromFolder(data.Dataset):
         w = w // 2
         input_image = a[:, w:, :]
         real_image = a[:, :w, :]
-        #input_image = self.tensor_tf(input_image)
-        #real_image = self.tensor_tf(real_image)
-        #input_image = torch.from_numpy(input_image)
-        #real_image = torch.from_numpy(real_image)
-        A = self.transform_list(input_image)
-        B = self.transform_list(real_image)
+        #AB = np.empty((256,256,6))
+        flip = random.random() > 0.5
+        transform_list = self.get_transforms(flip)
+        A = transform_list(input_image)
+        B = transform_list(real_image)
         return A, B
-
-        input_image = self.tensor_tf(input_image)
-        real_image = self.tensor_tf(real_image)
-        #input_image, real_image = random_jitter(input_image, real_image)
-        input_image, real_image = normalize(input_image, real_image)
-        """plt.imshow(input_image.cpu().detach().numpy().transpose(1,2,0))
-        plt.show()
-        plt.pause(5)
-        plt.imshow(real_image.cpu().detach().numpy().transpose(1,2,0))
-        plt.show()
-        plt.pause(10)
-        quit()"""
-
-        return input_image, real_image
         
 
     def __len__(self):
@@ -533,19 +527,19 @@ def init_weights(m):
 
 
 # %%
-train_dir = args.data_dir+"/train"  #../dataset/night2day/train/"
+train_dir = args.data_dir+"/train"  #../dataset/cityscapes/train/"
 train_data = DatasetFromFolder(train_dir)
 
-#val_dir = "../dataset/night2day/val/"
+#val_dir = "../dataset/cityscapes/val/"
 #val_data = DatasetFromFolder(val_dir)
 
-test_dir = "../dataset/cityscapes/val/"
+test_dir = "../dataset/cityscapes/test/"
 test_data = DatasetFromFolder(test_dir)
 
 # %%
 
 training_data_loader = DataLoader(dataset=train_data, batch_size=args.batch, shuffle=True)
-validation_data_loader = DataLoader(dataset=test_data, batch_size=1, shuffle=False)
+validation_data_loader = DataLoader(dataset=test_data, batch_size=1, shuffle=True)
 #testing_data_loader = DataLoader(dataset=test_data, batch_size=4, shuffle=False)
 
 # %%
@@ -555,7 +549,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # %%
 
-print("Building Generator")
+"""print("Building Generator")
 if args.network == "Unet":
     generator_model = Generator()
 elif args.network == "ED":
@@ -604,13 +598,13 @@ if train:
             #for param in discriminator_model.parameters():
             #    param.requires_grad = True
             disc_optim.zero_grad()
-            """real_input = torch.cat((input_img, real_img), 1)
+            real_input = torch.cat((input_img, real_img), 1)
             pred_real = discriminator_model(real_input)
             loss_real = criterionGAN(pred_real, True)
 
             fake_input = torch.cat((input_img, fake_img), 1)
             pred_fake = discriminator_model(fake_input.detach())
-            loss_generated = criterionGAN(pred_fake, False)"""
+            loss_generated = criterionGAN(pred_fake, False)
 
             real_input = torch.cat((input_img, real_img), 1)
             pred_real = discriminator_model.forward(real_input)
@@ -631,8 +625,8 @@ if train:
             gan_optim.zero_grad()
             fake_input = torch.cat((input_img, fake_img), 1)
             pred_fake = discriminator_model.forward(fake_input)
-            """gan_l1_loss = criterionL1(fake_img, real_img) * 100
-            gan_loss = criterionGAN(pred_fake, True)"""
+            gan_l1_loss = criterionL1(fake_img, real_img) * 100
+            gan_loss = criterionGAN(pred_fake, True)
             gan_l1_loss = l1_loss(fake_img, real_img) * 100.0
             gan_loss = bce_loss(pred_fake, torch.ones_like(pred_fake))
             if args.loss == "l1cgan":
@@ -656,7 +650,7 @@ if train:
             torch.save(discriminator_model, net_d_model_out_path)
         #quit()
     
-    
+"""
 # %%
 #with torch.no_grad():
 net_g = torch.load('generator_model.pth') # m
@@ -664,12 +658,16 @@ net_g.eval()
 for iteration, batch in tqdm(enumerate(validation_data_loader, 1)):
     input_img, real_img = batch[0].to('cuda'), batch[1].to('cuda')
     gen_op = net_g(input_img)
-    #gen_op = (gen_op - torch.min(gen_op))/(torch.max(gen_op)- torch.min(gen_op)) * 255
+    gen_op = (gen_op - torch.min(gen_op))/(torch.max(gen_op)- torch.min(gen_op)) * 255
     input_img = ((input_img[0].cpu().detach().numpy().transpose(1,2,0)+1)*127.5).astype(np.uint8) 
+    real_img = ((real_img[0].cpu().detach().numpy().transpose(1,2,0)+1)*127.5).astype(np.uint8) 
     #ax1.imshow(input_img)
     #ax2.imshow(((real_img[0].cpu().detach().numpy().transpose(1,2,0)+1)*127.5).astype(np.uint8))
-    gen_op = ((gen_op[0].cpu().detach().numpy().transpose(1,2,0)+1)*127.5).astype(np.uint8)
+    gen_op = ((gen_op[0].cpu().detach().numpy().transpose(1,2,0)+0)*1).astype(np.uint8)
     #ax3.imshow(gen_op)
     #plt.pause(1)
-    cv2.imwrite("../test/custom/input/"+str(iteration)+".png", input_img)
-    cv2.imwrite("../test/custom/generated/"+str(iteration)+".png", gen_op)
+    #Image.fromarray(input_img).save("../test/custom/generated/"+str(iteration)+"_ip.png")
+    #Image.fromarray(gen_op).save("../test/custom/generated/"+str(iteration)+".png")
+    #Image.fromarray(real_img).save("../test/custom/generated/"+str(iteration)+"_gt.png")
+    img_comb = np.hstack((real_img, input_img, gen_op))
+    Image.fromarray(img_comb).save("../test/custom/generated/"+str(iteration)+".png")
