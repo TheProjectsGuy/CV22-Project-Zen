@@ -12,6 +12,7 @@ from PIL import Image
 import functools
 import numpy as np
 import argparse
+import random
 
 parser = argparse.ArgumentParser(
     description="Training script for pix2pix",
@@ -47,15 +48,23 @@ class DatasetFromFolder(data.Dataset):
         super(DatasetFromFolder, self).__init__()
         self.path = image_dir
         self.image_filenames = [x for x in listdir(self.path)]
+        
+    
+    def get_transforms(self, flip):
         transform_list = []
         transform_list.append(tf.ToPILImage())
         transform_list.append(tf.Resize((286, 286), interpolation=tf.InterpolationMode.BICUBIC))
         transform_list.append(tf.RandomCrop((256, 256)))
-        transform_list.append(tf.RandomHorizontalFlip())
+        transform_list.append(tf.Lambda(lambda img: self.flip(img, flip)))
         transform_list += [tf.ToTensor()]
         transform_list += [tf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
-        self.transform_list = tf.Compose(transform_list)
-        self.tensor_tf = tf.ToTensor()
+        transform_list = tf.Compose(transform_list)
+        return transform_list
+    
+    def flip(self, img, flip):
+        if flip:
+            return img.transpose(Image.FLIP_LEFT_RIGHT)
+        return img
 
     def __getitem__(self, index):
         a = Image.open(join(self.path, self.image_filenames[index])).convert('RGB')
@@ -64,27 +73,12 @@ class DatasetFromFolder(data.Dataset):
         w = w // 2
         input_image = a[:, w:, :]
         real_image = a[:, :w, :]
-        #input_image = self.tensor_tf(input_image)
-        #real_image = self.tensor_tf(real_image)
-        #input_image = torch.from_numpy(input_image)
-        #real_image = torch.from_numpy(real_image)
-        A = self.transform_list(input_image)
-        B = self.transform_list(real_image)
+        #AB = np.empty((256,256,6))
+        flip = random.random() > 0.5
+        transform_list = self.get_transforms(flip)
+        A = transform_list(input_image)
+        B = transform_list(real_image)
         return A, B
-
-        input_image = self.tensor_tf(input_image)
-        real_image = self.tensor_tf(real_image)
-        #input_image, real_image = random_jitter(input_image, real_image)
-        input_image, real_image = normalize(input_image, real_image)
-        """#plt.imshow(input_image.cpu().detach().numpy().transpose(1,2,0))
-        #plt.show()
-        #plt.pause(5)
-        #plt.imshow(real_image.cpu().detach().numpy().transpose(1,2,0))
-        #plt.show()
-        #plt.pause(10)
-        quit()"""
-
-        return input_image, real_image
         
 
     def __len__(self):
@@ -335,7 +329,6 @@ def Dloss_function(real_image, generated_image, device):
 
 """
 class DownSampleConv(nn.Module):
-
     def __init__(self, in_channels, out_channels, kernel=4, strides=2, padding=1, activation=True, batchnorm=True):
         
         #Paper details:
@@ -346,15 +339,11 @@ class DownSampleConv(nn.Module):
         super().__init__()
         self.activation = activation
         self.batchnorm = batchnorm
-
         self.conv = nn.Conv2d(in_channels, out_channels, kernel, strides, padding)
-
         if batchnorm:
             self.bn = nn.BatchNorm2d(out_channels)
-
         if activation:
             self.act = nn.LeakyReLU(0.2)
-
     def forward(self, x):
         x = self.conv(x)
         if self.batchnorm:
@@ -364,7 +353,6 @@ class DownSampleConv(nn.Module):
         return x
     
 class UpSampleConv(nn.Module):
-
     def __init__(
         self,
         in_channels,
@@ -380,29 +368,21 @@ class UpSampleConv(nn.Module):
         self.activation = activation
         self.batchnorm = batchnorm
         self.dropout = dropout
-
         self.deconv = nn.ConvTranspose2d(in_channels, out_channels, kernel, strides, padding)
-
         if batchnorm:
             self.bn = nn.BatchNorm2d(out_channels)
-
         if activation:
             self.act = nn.ReLU(True)
-
         if dropout:
             self.drop = nn.Dropout2d(0.5)
-
     def forward(self, x):
         x = self.deconv(x)
         if self.batchnorm:
             x = self.bn(x)
-
         if self.dropout:
             x = self.drop(x)
         return x
-
 class Generator(nn.Module):
-
     def __init__(self, in_channels=3, out_channels=3):
         
         #Paper details:
@@ -412,7 +392,6 @@ class Generator(nn.Module):
         #- Decoder: CD512-CD1024-CD1024-C1024-C1024-C512 -C256-C128
         
         super().__init__()
-
         # encoder/donwsample convs
         self.encoders = [
             DownSampleConv(in_channels, 64, batchnorm=False),  # bs x 64 x 128 x 128
@@ -424,7 +403,6 @@ class Generator(nn.Module):
             DownSampleConv(512, 512),  # bs x 512 x 2 x 2
             DownSampleConv(512, 512),  # bs x 512 x 1 x 1
         ]
-
         # decoder/upsample convs
         self.decoders = [
             UpSampleConv(512, 512, dropout=True),  # bs x 512 x 2 x 2
@@ -438,33 +416,24 @@ class Generator(nn.Module):
         self.decoder_channels = [512, 512, 512, 512, 256, 128, 64]
         self.final_conv = nn.ConvTranspose2d(64, out_channels, kernel_size=4, stride=2, padding=1)
         self.tanh = nn.Tanh()
-
         self.encoders = nn.ModuleList(self.encoders)
         self.decoders = nn.ModuleList(self.decoders)
-
     def forward(self, x):
         skips_cons = []
         for encoder in self.encoders:
             x = encoder(x)
-
             skips_cons.append(x)
-
         skips_cons = list(reversed(skips_cons[:-1]))
         decoders = self.decoders[:-1]
-
         for decoder, skip in zip(decoders, skips_cons):
             x = decoder(x)
             # print(x.shape, skip.shape)
             x = torch.cat((x, skip), axis=1)
-
         x = self.decoders[-1](x)
         # print(x.shape)
         x = self.final_conv(x)
         return self.tanh(x)
-
-
 class Discriminator(nn.Module):
-
     def __init__(self, input_channels=6):
         super().__init__()
         self.d1 = DownSampleConv(input_channels, 64, batchnorm=False)
@@ -472,7 +441,6 @@ class Discriminator(nn.Module):
         self.d3 = DownSampleConv(128, 256)
         self.d4 = DownSampleConv(256, 512)
         self.final = nn.Conv2d(512, 1, kernel_size=1)
-
     def forward(self, x, y):
         x = torch.cat([x, y], axis=1)
         x0 = self.d1(x)
@@ -607,7 +575,6 @@ if train:
             """real_input = torch.cat((input_img, real_img), 1)
             pred_real = discriminator_model(real_input)
             loss_real = criterionGAN(pred_real, True)
-
             fake_input = torch.cat((input_img, fake_img), 1)
             pred_fake = discriminator_model(fake_input.detach())
             loss_generated = criterionGAN(pred_fake, False)"""
