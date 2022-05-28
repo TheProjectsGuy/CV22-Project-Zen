@@ -1,6 +1,8 @@
 # ---- Ignore editor files here ----
 # Ignore VSCode settings
 .vscode/
+
+# Personal to @ADI201998
 training_checkpoints/
 logs/
 pytorch-CycleGAN-and-pix2pix/
@@ -15,3 +17,21 @@ generator_model.pth
 pix2pix/
 cityscapes.tar
 generator_model_200.pth
+
+# Ignore test files
+test*
+
+# Ignore the checkpoints
+*_ckpts
+ckpts/
+pix2pix/
+training_checkpoints/
+logs/
+pytorch-CycleGAN-and-pix2pix/
+cityscapes.tar
+generator_model_200.pth
+generator_model.pth
+night2day-bs4.tar
+p2p_old.py
+p2p_test.py
+test.py

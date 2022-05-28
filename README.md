@@ -26,6 +26,10 @@ The contents of this folder are summarized below
 | S. No. | Item Name | Description |
 | :----- | :-------- | :---------- |
 | 1 | [reading](./reading/README.md) folder | All reading material |
+| 2 | [res](./res/) folder | All repository resources (utility) |
+| 3 | [pix2pix_tutorial.ipynb](./pix2pix_tutorial.ipynb) | Pix2Pix Notebook (cityscapes, image input, segmentation output) |
+| 4 | [ada_tf](./ada_tf/) | Pix2Pix training and testing (on Ada) using tensorflow |
+| 4 | [ada_pytorch](./ada_pytorch/) | Pix2Pix training and testing script(on Ada) using pytorch |
 
 ### Extra files
 
@@ -44,3 +48,4 @@ Some files that are for the project itself
 
 - GitHub [phillipi/pix2pix](https://github.com/phillipi/pix2pix) (torch in lua)
 - TensorFlow Tutorials: [generative/pix2pix](https://www.tensorflow.org/tutorials/generative/pix2pix)
+- PyTorch tutorials: [junyanz/pytorch-CycleGAN-and-pix2pix](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix)
