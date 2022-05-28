@@ -29,6 +29,7 @@ The contents of this folder are summarized below
 | 2 | [res](./res/) folder | All repository resources (utility) |
 | 3 | [pix2pix_tutorial.ipynb](./pix2pix_tutorial.ipynb) | Pix2Pix Notebook (cityscapes, image input, segmentation output) |
 | 4 | [ada_tf](./ada_tf/) | Pix2Pix training and testing (on Ada) using tensorflow |
+| 4 | [ada_pytorch](./ada_pytorch/) | Pix2Pix training and testing script(on Ada) using pytorch |
 
 ### Extra files
 
